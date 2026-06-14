@@ -1,0 +1,14 @@
+# Build output
+dist/
+build/
+*.jar
+
+# Gradle (not used, but ignore if anyone adds it)
+.gradle/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

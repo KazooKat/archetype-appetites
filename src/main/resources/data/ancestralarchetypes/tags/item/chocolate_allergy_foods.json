@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    { "id": "farmersdelight:hot_cocoa", "required": false },
+    { "id": "farmersdelight:chocolate_pie_slice", "required": false }
+  ]
+}

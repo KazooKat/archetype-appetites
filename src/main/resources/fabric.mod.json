@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "archetype_appetites",
+  "version": "1.0.0",
+  "name": "Archetype Appetites",
+  "description": "Compatibility patch that lets Ancestral Archetypes carnivores (cat, ocelot) eat Farmer's Delight meat and fish foods, and makes the parrot's chocolate allergy react to Farmer's Delight cocoa foods. Adds Farmer's Delight items to Ancestral Archetypes' own diet tags, following the same meat/fish rule the base mod uses.",
+  "authors": [
+    "KazooKat"
+  ],
+  "contact": {
+    "homepage": "https://github.com/KazooKat/archetype-appetites",
+    "sources": "https://github.com/KazooKat/archetype-appetites",
+    "issues": "https://github.com/KazooKat/archetype-appetites/issues"
+  },
+  "license": "OSL-3.0",
+  "environment": "*",
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": ">=1.21.5 <1.22",
+    "ancestralarchetypes": "*",
+    "farmersdelight": "*"
+  }
+}
