@@ -1,14 +1,23 @@
 # Build output
-dist/
 build/
+dist/
 *.jar
+# ...but the Gradle wrapper jar MUST be committed
+!gradle/wrapper/gradle-wrapper.jar
 
-# Gradle (not used, but ignore if anyone adds it)
+# Gradle
 .gradle/
+!gradle-wrapper.properties
+
+# Stray marker files some Gradle/Loom runs drop in the project root
+/named
+/1.21.5
 
 # IDE / OS
 .idea/
 .vscode/
 *.iml
+eclipse/
+run/
 .DS_Store
 Thumbs.db

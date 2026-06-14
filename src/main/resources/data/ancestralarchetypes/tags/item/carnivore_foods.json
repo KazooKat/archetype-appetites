@@ -5,6 +5,7 @@
     "#c:foods/cooked_meat",
     "#c:foods/raw_fish",
     "#c:foods/cooked_fish",
+    "#minecraft:fishes",
     { "id": "farmersdelight:beef_stew", "required": false },
     { "id": "farmersdelight:chicken_soup", "required": false },
     { "id": "farmersdelight:fish_stew", "required": false },
@@ -32,6 +33,9 @@
     { "id": "farmersdelight:salmon_roll", "required": false },
     { "id": "farmersdelight:stuffed_potato", "required": false },
     { "id": "farmersdelight:dumplings", "required": false },
-    { "id": "farmersdelight:dog_food", "required": false }
+    { "id": "farmersdelight:dog_food", "required": false },
+    { "id": "gofish:aquatic_astral_stew", "required": false },
+    { "id": "gofish:endfish_and_chorus", "required": false },
+    { "id": "gofish:grilled_blackstone_deluxe", "required": false }
   ]
 }

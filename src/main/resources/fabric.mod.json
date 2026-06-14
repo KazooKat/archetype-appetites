@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "archetype_appetites",
-  "version": "1.0.0",
+  "version": "${version}",
   "name": "Archetype Appetites",
-  "description": "Compatibility patch that lets Ancestral Archetypes carnivores (cat, ocelot) eat Farmer's Delight meat and fish foods, and makes the parrot's chocolate allergy react to Farmer's Delight cocoa foods. Adds Farmer's Delight items to Ancestral Archetypes' own diet tags, following the same meat/fish rule the base mod uses.",
+  "description": "Compatibility patch for Ancestral Archetypes on the Polymania modpack. Carnivore archetypes (cat, ocelot) can eat Farmer's Delight and Gone Fishing meat/fish; the parrot's chocolate allergy reacts to Farmer's Delight cocoa foods; and the copper/iron/tuff golem archetypes can eat PolyFactory metals. Follows Ancestral Archetypes' own diet tags and heal values.",
   "authors": [
     "KazooKat"
   ],
@@ -14,10 +14,22 @@
   },
   "license": "OSL-3.0",
   "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.kazookat.archetypeappetites.ArchetypeAppetites"
+    ]
+  },
   "depends": {
     "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
     "minecraft": ">=1.21.5 <1.22",
-    "ancestralarchetypes": "*",
-    "farmersdelight": "*"
+    "ancestralarchetypes": "*"
+  },
+  "recommends": {
+    "farmersdelight": "*",
+    "polyfactory": "*"
+  },
+  "suggests": {
+    "go-fish": "*"
   }
 }

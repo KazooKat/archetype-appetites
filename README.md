@@ -1,62 +1,65 @@
 # Archetype Appetites
 
-A tiny **server-side compatibility patch** that teaches [Ancestral Archetypes](https://modrinth.com/mod/ancestral-archetypes) about [Farmer's Delight](https://modrinth.com/mod/farmers-delight-refabricated) food.
+A **compatibility patch** that teaches [Ancestral Archetypes](https://modrinth.com/mod/ancestral-archetypes) about the food and materials added by the [Polymania](https://modrinth.com/modpack/polymania) modpack, so its archetypes' diet restrictions stay consistent instead of arbitrarily rejecting modded items.
 
-By default, the cat and ocelot archetypes are **carnivores** — Ancestral Archetypes only lets them eat things in its `ancestralarchetypes:carnivore_foods` item tag (vanilla meats, fish, and a couple of meaty dishes like rabbit stew). That means all of Farmer's Delight's stews, sandwiches, roasts and fish dishes are *off the menu* for them, which feels inconsistent.
+Ancestral Archetypes gives several archetypes special diets:
 
-This patch adds Farmer's Delight's meat and fish foods to that tag (and to the parrot's `chocolate_allergy_foods` tag), using the **same rule the base mod uses**: if a dish contains real meat or fish, a carnivore can eat it — exactly the logic that puts vanilla `rabbit_stew` on the allowed list.
+- **Carnivores** (cat, ocelot) can only eat things in its `carnivore_foods` tag — vanilla meat, fish, and a few meaty dishes like rabbit stew.
+- The **parrot** is poisoned by things in its `chocolate_allergy_foods` tag (vanilla cookie).
+- The **copper / iron / tuff golems** heal by *eating metal* — but only the specific vanilla metal items the base mod hard-codes.
 
-It is built for use alongside the [Polymania](https://modrinth.com/modpack/polymania) modpack, which ships Farmer's Delight Refabricated, but works with any setup that has both mods.
+Out of the box, none of Polymania's modded food or metals fit those diets. This patch fixes that, following the base mod's own rules and heal values.
+
+## What it does
+
+| Archetype(s) | Now also accepts |
+|---|---|
+| **Cat, Ocelot** (carnivore) | All conventionally-tagged meat & fish (`#c:foods/*`, `#minecraft:fishes`) — covers Farmer's Delight cuts, **Gone Fishing** fish, and other food mods — plus Farmer's Delight meat/fish **dishes** (stews, sandwiches, roasts, ham, rolls…) and Gone Fishing fish stews. |
+| **Parrot** (chocolate allergy) | Farmer's Delight `hot_cocoa` and `chocolate_pie_slice`. |
+| **Copper Golem** | PolyFactory `copper_plate`, `crushed_raw_copper`. |
+| **Iron Golem** | PolyFactory `crushed_raw_iron` and the **steel** family (`steel_ingot`, `steel_plate`, `steel_nugget`, `steel_mesh`, `steel_gear`, `large_steel_gear`). |
+
+The carnivore rule matches Ancestral Archetypes itself: a dish counts if it contains real meat or fish (the base mod allows `rabbit_stew`), while vegetarian dishes do not. Golem heal values mirror the base mod's numbers (e.g. an iron ingot heals 4 HP, so steel ingot does too).
+
+Carnivore and chocolate-allergy diets are item **tags**, handled by data files. The golem "metal eater" diets are Java `HashMap`s in Ancestral Archetypes that a datapack can't reach, so this mod includes a tiny Fabric entrypoint that registers the metals into those maps at server start (via reflection — no compile-time dependency on Ancestral Archetypes, and a safe no-op if a mod is missing).
 
 ## Requirements
 
-| Mod | Notes |
-|-----|-------|
-| [Ancestral Archetypes](https://modrinth.com/mod/ancestral-archetypes) | The diet mechanic this patches. |
-| [Farmer's Delight Refabricated](https://modrinth.com/mod/farmers-delight-refabricated) | Provides the food (bundled in Polymania). Mod id `farmersdelight`. |
-| Fabric Loader + Fabric API | Same as the two mods above. |
+| Mod | Required? | Why |
+|-----|-----------|-----|
+| [Ancestral Archetypes](https://modrinth.com/mod/ancestral-archetypes) | **Yes** | The mod being patched. |
+| Fabric API | **Yes** | Server-lifecycle hook for the golem patch. |
+| [Farmer's Delight Refabricated](https://modrinth.com/mod/farmers-delight-refabricated) | Recommended | Adds the meat/fish dishes & cocoa foods (bundled in Polymania, id `farmersdelight`). |
+| [PolyFactory](https://modrinth.com/mod/polyfactory) | Recommended | Adds the copper/steel the golems eat. |
+| [Gone Fishing!](https://modrinth.com/mod/gone-fishing) | Suggested | Adds the extra fish & fish stews (id `go-fish`). |
 
-- Minecraft **1.21.5 – 1.21.11** (Fabric). The tag data is version-tolerant; the mod simply declares this range.
-- The patch is **data only — no code**. It depends on both mods and does nothing on its own.
+Minecraft **1.21.5 – 1.21.11** (Fabric). Every modded entry is optional at runtime, so the patch loads cleanly even if some of those mods are absent.
 
 ## Install
 
-Drop `archetype-appetites-<version>.jar` into your server's `mods/` folder, next to Ancestral Archetypes and Farmer's Delight. That's it — the tags merge in automatically when the server loads. Grab the jar from [Releases](https://github.com/KazooKat/archetype-appetites/releases), or build it yourself (below).
+Download `archetype-appetites-<version>.jar` from [Releases](https://github.com/KazooKat/archetype-appetites/releases) and drop it in your server's `mods/` folder alongside the mods above. No config needed.
 
-## What changes
+## Build from source
 
-**Carnivores (cat, ocelot) can now eat:**
-
-- **All conventionally-tagged meat and fish** via `#c:foods/raw_meat`, `#c:foods/cooked_meat`, `#c:foods/raw_fish`, `#c:foods/cooked_fish`. This covers Farmer's Delight cuts (minced beef, patties, chicken cuts, mutton chops, bacon, fish slices, …) **and** any other food mod that uses the standard `c:foods` convention tags.
-- **Farmer's Delight meat & fish dishes** (listed explicitly, because Farmer's Delight's `meals` tag mixes meat and vegetarian dishes together): beef stew, chicken soup, fish stew, baked cod stew, bone broth, noodle soup, squid ink pasta, steak & potatoes, pasta with meatballs, pasta with mutton chop, roasted mutton chops, grilled salmon, roast chicken, honey glazed ham, shepherd's pie, bacon & eggs, bacon/chicken sandwiches, hamburger, ham, smoked ham, mutton wrap, barbecue stick, cod/salmon rolls, stuffed potato, dumplings, dog food.
-
-**Parrot's chocolate allergy** now also reacts (poison) to Farmer's Delight `hot_cocoa` and `chocolate_pie_slice`, matching how it already reacts to the vanilla cookie.
-
-**Deliberately *not* carnivore food** (no real meat/fish — kept consistent with the base mod, which excludes vegetarian dishes): kelp rolls (kelp + rice + carrot despite the name), cabbage rolls (filling is optional), fried egg / egg sandwich / fried rice (egg is not counted as meat by Ancestral Archetypes), milk bottle, and all soups, salads, desserts and grain dishes (vegetable soup, mixed salad, ratatouille, mushroom rice, pumpkin soup, cake, fruit pies, popsicles, …).
-
-A few judgment calls worth knowing:
-
-- **`dog_food` is included** — it's crafted from rotten flesh and raw meat, and Ancestral Archetypes already lets carnivores eat rotten flesh.
-- **`cabbage_rolls` is excluded** — its filling can be entirely vegetarian, so meat isn't guaranteed.
-- **`squid_ink_pasta` is included** — its recipe contains real fish, not just ink.
-
-## How it works
-
-Ancestral Archetypes gates eating with a runtime tag check (`stack.is(ancestralarchetypes:carnivore_foods)`). Minecraft merges item tags across all mods and datapacks, so this patch just ships its own additions to that tag — it never edits or overrides the base mod's entries (`"replace": false`). All Farmer's Delight entries are marked `"required": false`, so if an item is missing in a particular version the tag still loads cleanly instead of erroring.
-
-## Build
-
-The jar is just a zip of `src/main/resources/` (a valid Fabric mod needs nothing more for a data-only patch), so no Gradle or Minecraft toolchain is required.
+It's a normal Fabric mod, built with Fabric Loom — only a JDK is required (Gradle and the JDK 21 toolchain are fetched automatically):
 
 ```bash
-# Linux / macOS / Git Bash (needs `zip`)
-bash scripts/build.sh
-
-# Windows PowerShell
-pwsh scripts/build.ps1   # or: powershell -File scripts/build.ps1
+./gradlew build        # Linux / macOS
+gradlew.bat build      # Windows
 ```
 
-The jar lands in `dist/`. CI ([`.github/workflows/release.yml`](.github/workflows/release.yml)) builds the same way and attaches the jar to a GitHub Release whenever a `v*` tag is pushed.
+The finished jar is written to `build/libs/`. CI ([`.github/workflows/release.yml`](.github/workflows/release.yml)) runs the same build and attaches the jar to a GitHub Release on every `v*` tag.
+
+## Project layout
+
+```
+src/main/java/com/kazookat/archetypeappetites/ArchetypeAppetites.java   # golem metal-eater bridge
+src/main/resources/
+  fabric.mod.json
+  data/ancestralarchetypes/tags/item/
+    carnivore_foods.json            # cat / ocelot additions (tags + dishes)
+    chocolate_allergy_foods.json    # parrot additions
+```
 
 ## License
 
