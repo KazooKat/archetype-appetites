@@ -16,12 +16,12 @@ Out of the box, none of Polymania's modded food or metals fit those diets. This 
 |---|---|
 | **Cat, Ocelot** (carnivore) | All conventionally-tagged meat & fish (`#c:foods/*`, `#minecraft:fishes`) — covers Farmer's Delight cuts, **Gone Fishing** fish, and other food mods — plus Farmer's Delight meat/fish **dishes** (stews, sandwiches, roasts, ham, rolls…) and Gone Fishing fish stews. |
 | **Parrot** (chocolate allergy) | Farmer's Delight `hot_cocoa` and `chocolate_pie_slice`. |
-| **Copper Golem** | PolyFactory `copper_plate`, `crushed_raw_copper`. |
-| **Iron Golem** | PolyFactory `crushed_raw_iron` and the **steel** family (`steel_ingot`, `steel_plate`, `steel_nugget`, `steel_mesh`, `steel_gear`, `large_steel_gear`). |
+| **Copper Golem** | **Any mod's copper** tagged into the standard `c:` sub-tags (`ingots`, `nuggets`, `raw_materials`, `ores`, `storage_blocks`), plus PolyFactory `copper_plate` & `crushed_raw_copper`. |
+| **Iron Golem** | **Any mod's iron** via the same `c:` sub-tags, plus PolyFactory `crushed_raw_iron` and the **steel** family (`steel_ingot`, `steel_plate`, `steel_nugget`, `steel_mesh`, `steel_gear`, `large_steel_gear`). |
 
 The carnivore rule matches Ancestral Archetypes itself: a dish counts if it contains real meat or fish (the base mod allows `rabbit_stew`), while vegetarian dishes do not. Golem heal values mirror the base mod's numbers (e.g. an iron ingot heals 4 HP, so steel ingot does too).
 
-Carnivore and chocolate-allergy diets are item **tags**, handled by data files. The golem "metal eater" diets are Java `HashMap`s in Ancestral Archetypes that a datapack can't reach, so this mod includes a tiny Fabric entrypoint that registers the metals into those maps at server start (via reflection — no compile-time dependency on Ancestral Archetypes, and a safe no-op if a mod is missing).
+Carnivore and chocolate-allergy diets are item **tags**, handled by data files. (Chocolate stays Farmer's Delight-only on purpose — it's the only mod in Polymania that adds a cocoa food.) The golem "metal eater" diets are Java `HashMap`s in Ancestral Archetypes that a datapack can't reach, so this mod includes a tiny Fabric entrypoint that, at server start, feeds those maps from the standard `c:` copper/iron convention tags (covering any mod) plus an explicit list for modded metals that don't use those sub-tags. It works by reflection — no compile-time dependency on Ancestral Archetypes, existing entries are never overwritten, and it's a safe no-op if a mod is missing.
 
 ## Requirements
 
