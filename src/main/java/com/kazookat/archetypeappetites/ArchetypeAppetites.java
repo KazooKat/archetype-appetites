@@ -110,6 +110,14 @@ public class ArchetypeAppetites implements ModInitializer {
         LOG.info("Registered {} modded item(s) for copper/iron/tuff golem archetypes.", added);
     }
 
+    /** Adds item -> (heal, duration) unless it's air, edible (a golem diet must never gate a food), or already present. */
+    private static boolean tryAdd(Map<Item, Tuple<Float, Integer>> map, Item item, float heal, int duration) {
+        if (item == Items.AIR || item.getDefaultInstance().has(DataComponents.FOOD)) {
+            return false;
+        }
+        return map.putIfAbsent(item, new Tuple<>(heal, duration)) == null;
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<Item, Tuple<Float, Integer>> mapOf(Class<?> registry, String field) {
         try {
@@ -130,12 +138,10 @@ public class ArchetypeAppetites implements ModInitializer {
         }
         int added = 0;
         for (Map.Entry<String, float[]> entry : entries.entrySet()) {
+            // missing item resolves to AIR -> tryAdd skips it (that mod isn't installed)
             Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(entry.getKey()));
-            if (item == Items.AIR) {
-                continue; // that mod/item isn't installed
-            }
             float[] v = entry.getValue();
-            if (map.putIfAbsent(item, new Tuple<>(v[0], (int) v[1])) == null) {
+            if (tryAdd(map, item, v[0], (int) v[1])) {
                 added++;
             }
         }
@@ -154,11 +160,7 @@ public class ArchetypeAppetites implements ModInitializer {
         }
         int added = 0;
         for (Holder<Item> holder : holders.get()) {
-            Item item = holder.value();
-            if (item == Items.AIR) {
-                continue;
-            }
-            if (map.putIfAbsent(item, new Tuple<>(rule.heal(), rule.duration())) == null) {
+            if (tryAdd(map, holder.value(), rule.heal(), rule.duration())) {
                 added++;
             }
         }
@@ -181,11 +183,9 @@ public class ArchetypeAppetites implements ModInitializer {
             if (id == null || !hasToken(id.getPath(), "tuff")) {
                 continue;
             }
-            if (item.getDefaultInstance().has(DataComponents.FOOD)) {
-                continue; // never gate an actual food item behind the tuff diet
-            }
+            // tryAdd skips edible items, so the tuff diet never blocks normal eating.
             float[] v = tuffHeal(id.getPath());
-            if (map.putIfAbsent(item, new Tuple<>(v[0], (int) v[1])) == null) {
+            if (tryAdd(map, item, v[0], (int) v[1])) {
                 added++;
             }
         }
