@@ -2,91 +2,50 @@ package com.kazookat.archetypeappetites;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.minecraft.core.Holder;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.tags.TagKey;
 import net.minecraft.util.Tuple;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.SpawnEggItem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
  * Carnivore / chocolate-allergy diets are item tags, handled entirely by this mod's data files.
- * The golem "metal eater" diets are NOT tags - Ancestral Archetypes stores them in Java
- * {@code HashMap<Item, Tuple<Float,Integer>>} fields with per-item heal values, so a datapack
- * cannot reach them.
  *
- * <p>This initializer bridges that gap at server start, via reflection (no compile-time dependency
- * on Ancestral Archetypes; a safe no-op if it is absent). It feeds the golem maps two ways:
- * <ol>
- *   <li><b>By convention tag</b> - every copper/iron item any mod tags into the standard
- *       {@code c:ingots/*}, {@code c:nuggets/*}, {@code c:raw_materials/*}, {@code c:ores/*} and
- *       {@code c:storage_blocks/*} sub-tags, with heal values scaled by the item's form.</li>
- *   <li><b>By explicit id</b> - modded metal items that don't sit in those sub-tags
- *       (e.g. PolyFactory plates, gears, crushed materials and the steel family).</li>
- * </ol>
- * Heal values mirror Ancestral Archetypes' own numbers, and existing entries are never overwritten.
+ * <p>The golem "metal eater" diets are NOT tags - Ancestral Archetypes keeps them in Java
+ * {@code HashMap<Item, Tuple<Float,Integer>>} fields ({@code COPPER_FOODS}, {@code IRON_FOODS},
+ * {@code TUFF_FOODS}) and, at runtime, dynamically attaches a CONSUMABLE component to any held item
+ * found in the matching map (eat time = {@code tuple.getB()/20s}) then heals {@code tuple.getA()}.
+ * A datapack cannot reach those maps.
+ *
+ * <p>This initializer bridges the gap by reflecting into those maps at server start (no compile-time
+ * dependency on Ancestral Archetypes; a safe no-op if it is absent). Rather than hard-code per-mod
+ * item lists, it scans the whole item registry once and routes every item whose id has a
+ * {@code copper} / {@code iron} / {@code steel} / {@code tuff} name-token into the right map, with a
+ * heal value derived from the item's form (mirroring Ancestral Archetypes' own numbers). Steel is
+ * treated as an iron alloy. Existing entries are never overwritten, so AA's tuned vanilla values win.
+ *
+ * <p>Guards keep the diets clean: items that are edible, spawn eggs, in-world display items, the
+ * {@code flint_and_steel} tool and crafting "mixture" blends are skipped (an edible entry would also
+ * stop non-golem players from eating it, since AA cancels metal/tuff eating for non-eaters).
  */
 public class ArchetypeAppetites implements ModInitializer {
     public static final String MOD_ID = "archetype_appetites";
     private static final Logger LOG = LoggerFactory.getLogger("ArchetypeAppetites");
     private static final String AA_REGISTRY = "net.borisshoes.ancestralarchetypes.ArchetypeRegistry";
 
-    // Explicit modded metals NOT covered by the metal-specific convention sub-tags.
-    // itemId -> { healAmount, durationTicks }.
-    private static final Map<String, float[]> COPPER_ITEMS = new LinkedHashMap<>();
-    private static final Map<String, float[]> IRON_ITEMS = new LinkedHashMap<>();
-
-    static {
-        // PolyFactory copper-family (AA: copper ingot 1.0/9, raw copper 1.0/20).
-        COPPER_ITEMS.put("polyfactory:copper_plate", new float[]{1.0f, 9});
-        COPPER_ITEMS.put("polyfactory:crushed_raw_copper", new float[]{1.0f, 20});
-
-        // PolyFactory iron / steel-family, steel treated as an iron alloy (AA: iron ingot 4.0/20, nugget 0.4/2).
-        IRON_ITEMS.put("polyfactory:crushed_raw_iron", new float[]{2.0f, 20});
-        IRON_ITEMS.put("polyfactory:steel_nugget", new float[]{0.4f, 2});
-        IRON_ITEMS.put("polyfactory:steel_ingot", new float[]{4.0f, 20});
-        IRON_ITEMS.put("polyfactory:steel_plate", new float[]{4.0f, 20});
-        IRON_ITEMS.put("polyfactory:steel_mesh", new float[]{3.0f, 15});
-        IRON_ITEMS.put("polyfactory:steel_gear", new float[]{5.0f, 25});
-        IRON_ITEMS.put("polyfactory:large_steel_gear", new float[]{10.0f, 40});
-    }
-
-    /** A copper/iron convention sub-tag mapped to an Ancestral Archetypes map + heal value. */
-    private record TagRule(String field, String tag, float heal, int duration) {}
-
-    private static final List<TagRule> TAG_RULES = List.of(
-            // copper_golem (COPPER_FOODS)
-            new TagRule("COPPER_FOODS", "c:ingots/copper", 1.0f, 9),
-            new TagRule("COPPER_FOODS", "c:nuggets/copper", 0.1f, 1),
-            new TagRule("COPPER_FOODS", "c:raw_materials/copper", 1.0f, 20),
-            new TagRule("COPPER_FOODS", "c:ores/copper", 1.5f, 20),
-            new TagRule("COPPER_FOODS", "c:storage_blocks/copper", 9.0f, 80),
-            // iron_golem (IRON_FOODS)
-            new TagRule("IRON_FOODS", "c:ingots/iron", 4.0f, 20),
-            new TagRule("IRON_FOODS", "c:nuggets/iron", 0.4f, 2),
-            new TagRule("IRON_FOODS", "c:raw_materials/iron", 2.0f, 20),
-            new TagRule("IRON_FOODS", "c:ores/iron", 3.0f, 25),
-            new TagRule("IRON_FOODS", "c:storage_blocks/iron", 25.0f, 125)
-    );
-
     @Override
     public void onInitialize() {
-        // SERVER_STARTING fires after datapacks/tags are loaded and Ancestral Archetypes is initialised.
-        ServerLifecycleEvents.SERVER_STARTING.register(this::applyGolemFoods);
+        // SERVER_STARTING fires after the item registry is frozen and Ancestral Archetypes is loaded.
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> applyGolemFoods());
     }
 
-    private void applyGolemFoods(MinecraftServer server) {
+    private static void applyGolemFoods() {
         final Class<?> registry;
         try {
             registry = Class.forName(AA_REGISTRY);
@@ -95,27 +54,119 @@ public class ArchetypeAppetites implements ModInitializer {
             return;
         }
 
-        int added = 0;
-        added += feedById(registry, "COPPER_FOODS", COPPER_ITEMS);
-        added += feedById(registry, "IRON_FOODS", IRON_ITEMS);
+        Map<Item, Tuple<Float, Integer>> copper = mapOf(registry, "COPPER_FOODS");
+        Map<Item, Tuple<Float, Integer>> iron = mapOf(registry, "IRON_FOODS");
+        Map<Item, Tuple<Float, Integer>> tuff = mapOf(registry, "TUFF_FOODS");
 
-        HolderLookup.RegistryLookup<Item> items = server.registryAccess().lookupOrThrow(Registries.ITEM);
-        for (TagRule rule : TAG_RULES) {
-            added += feedByTag(registry, items, rule);
+        int c = 0, i = 0, t = 0;
+        for (Item item : BuiltInRegistries.ITEM) {
+            Identifier id = BuiltInRegistries.ITEM.getKey(item);
+            if (id == null) {
+                continue;
+            }
+            String path = id.getPath();
+            if (skip(item, path)) {
+                continue;
+            }
+            if (copper != null && hasToken(path, "copper")) {
+                c += add(copper, item, copperHeal(path));
+            }
+            if (iron != null && (hasToken(path, "iron") || hasToken(path, "steel"))) {
+                i += add(iron, item, ironHeal(path));
+            }
+            if (tuff != null && hasToken(path, "tuff")) {
+                t += add(tuff, item, tuffHeal(path));
+            }
         }
-
-        // Tuff has no metal-style convention tag, so scan for "tuff"-named blocks instead.
-        added += feedTuffByScan(registry);
-
-        LOG.info("Registered {} modded item(s) for copper/iron/tuff golem archetypes.", added);
+        LOG.info("Archetype Appetites: registered golem foods (+{} copper, +{} iron/steel, +{} tuff).", c, i, t);
     }
 
-    /** Adds item -> (heal, duration) unless it's air, edible (a golem diet must never gate a food), or already present. */
-    private static boolean tryAdd(Map<Item, Tuple<Float, Integer>> map, Item item, float heal, int duration) {
-        if (item == Items.AIR || item.getDefaultInstance().has(DataComponents.FOOD)) {
-            return false;
+    /** Items that carry a metal name-token but must never become golem food. */
+    private static boolean skip(Item item, String path) {
+        return path.endsWith("spawn_egg")
+                || item instanceof SpawnEggItem
+                || path.endsWith("_world")          // in-world display items (e.g. PolyFactory placed gears)
+                || hasToken(path, "mixture")        // e.g. polyfactory:steel_alloy_mixture (coal/redstone blend)
+                || path.equals("flint_and_steel")
+                || item.getDefaultInstance().has(DataComponents.FOOD); // never gate an edible item
+    }
+
+    private static int add(Map<Item, Tuple<Float, Integer>> map, Item item, float[] hv) {
+        if (item == Items.AIR) {
+            return 0;
         }
-        return map.putIfAbsent(item, new Tuple<>(heal, duration)) == null;
+        return map.putIfAbsent(item, new Tuple<>(hv[0], (int) hv[1])) == null ? 1 : 0;
+    }
+
+    /** True if {@code token} is a whole '_'-separated segment of {@code path} (so "stuffed" != "tuff"). */
+    private static boolean hasToken(String path, String token) {
+        for (String part : path.split("_")) {
+            if (part.equals(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isTool(String path) {
+        return hasToken(path, "knife") || hasToken(path, "sword") || hasToken(path, "pickaxe")
+                || hasToken(path, "axe") || hasToken(path, "hoe") || hasToken(path, "shovel")
+                || hasToken(path, "spear") || hasToken(path, "shears");
+    }
+
+    // Heal values {amount, durationTicks} mirror Ancestral Archetypes' vanilla numbers, by item form.
+    // Weathering state is not scaled (modded variants all use the base form value).
+
+    private static float[] copperHeal(String path) {
+        if (path.endsWith("pressure_plate")) return new float[]{0.6f, 6};
+        if (path.endsWith("button")) return new float[]{0.3f, 3};
+        if (path.endsWith("nugget")) return new float[]{0.1f, 1};
+        if (path.endsWith("ingot") || path.endsWith("plate")) return new float[]{1.0f, 9};
+        if (hasToken(path, "raw")) return new float[]{1.0f, 20};
+        if (path.endsWith("ore")) return new float[]{1.5f, 20};
+        if (path.endsWith("slab")) return new float[]{1.5f, 12};
+        if (path.endsWith("stairs") || path.endsWith("wall") || path.endsWith("gate")) return new float[]{2.0f, 16};
+        if (path.endsWith("trapdoor")) return new float[]{1.75f, 14};
+        if (path.endsWith("door")) return new float[]{1.25f, 10};
+        if (path.endsWith("bars") || path.endsWith("chain") || hasToken(path, "lantern")) return new float[]{0.9f, 8};
+        if (hasToken(path, "bulb")) return new float[]{4.0f, 29};
+        if (isTool(path)) return new float[]{3.0f, 15};
+        if (path.endsWith("block")) return new float[]{2.0f, 16};
+        return new float[]{3.0f, 22}; // bricks, cut, chiseled, grate, tiles, pillar, brazier, campfire, etc.
+    }
+
+    private static float[] ironHeal(String path) {
+        if (path.endsWith("pressure_plate")) return new float[]{2.0f, 16};
+        if (path.endsWith("button")) return new float[]{1.0f, 8};
+        if (path.endsWith("nugget")) return new float[]{0.4f, 2};
+        if (path.endsWith("ingot")) return new float[]{4.0f, 20};
+        if (path.endsWith("plate") || path.endsWith("mesh")) return new float[]{4.0f, 20};
+        if (hasToken(path, "raw")) return new float[]{2.0f, 20};
+        if (path.endsWith("ore")) return new float[]{3.0f, 25};
+        if (path.endsWith("slab")) return new float[]{2.0f, 16};
+        if (path.endsWith("stairs") || path.endsWith("wall") || path.endsWith("gate")) return new float[]{4.0f, 24};
+        if (path.endsWith("trapdoor")) return new float[]{10.0f, 50};
+        if (path.endsWith("door")) return new float[]{6.0f, 30};
+        if (path.endsWith("bars") || path.endsWith("chain")) return new float[]{3.0f, 15};
+        if (hasToken(path, "large") && hasToken(path, "gear")) return new float[]{10.0f, 40};
+        if (path.endsWith("gear")) return new float[]{5.0f, 25};
+        if (isTool(path)) return new float[]{5.0f, 15};
+        if (hasToken(path, "brick") || hasToken(path, "bricks") || hasToken(path, "plating")
+                || hasToken(path, "tile") || hasToken(path, "tiles") || hasToken(path, "crate")) {
+            return new float[]{4.0f, 24}; // decorative blocks - a few ingots' worth
+        }
+        if (path.endsWith("block")) return new float[]{25.0f, 125}; // storage block (9 ingots)
+        return new float[]{4.0f, 20};
+    }
+
+    private static float[] tuffHeal(String path) {
+        if (path.endsWith("slab")) return new float[]{2.0f, 16};
+        if (path.endsWith("stairs") || path.endsWith("wall")) return new float[]{4.0f, 24};
+        if (path.endsWith("button")) return new float[]{0.5f, 4};
+        if (path.endsWith("pressure_plate")) return new float[]{1.0f, 10};
+        if (hasToken(path, "brick") || hasToken(path, "bricks")) return new float[]{4.0f, 24};
+        if (hasToken(path, "polished")) return new float[]{3.0f, 22};
+        return new float[]{2.5f, 20}; // tiles, pillar, paving, carved, cracked, mossy, statue, plain
     }
 
     @SuppressWarnings("unchecked")
@@ -126,101 +177,5 @@ public class ArchetypeAppetites implements ModInitializer {
             LOG.warn("Could not access {}.{} ({}); skipping that golem diet.", AA_REGISTRY, field, e.toString());
             return null;
         }
-    }
-
-    private static int feedById(Class<?> registry, String field, Map<String, float[]> entries) {
-        if (entries.isEmpty()) {
-            return 0;
-        }
-        Map<Item, Tuple<Float, Integer>> map = mapOf(registry, field);
-        if (map == null) {
-            return 0;
-        }
-        int added = 0;
-        for (Map.Entry<String, float[]> entry : entries.entrySet()) {
-            // missing item resolves to AIR -> tryAdd skips it (that mod isn't installed)
-            Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(entry.getKey()));
-            float[] v = entry.getValue();
-            if (tryAdd(map, item, v[0], (int) v[1])) {
-                added++;
-            }
-        }
-        return added;
-    }
-
-    private static int feedByTag(Class<?> registry, HolderLookup.RegistryLookup<Item> items, TagRule rule) {
-        Map<Item, Tuple<Float, Integer>> map = mapOf(registry, rule.field());
-        if (map == null) {
-            return 0;
-        }
-        TagKey<Item> tag = TagKey.create(Registries.ITEM, Identifier.parse(rule.tag()));
-        var holders = items.get(tag);
-        if (holders.isEmpty()) {
-            return 0; // no mod contributes to this tag
-        }
-        int added = 0;
-        for (Holder<Item> holder : holders.get()) {
-            if (tryAdd(map, holder.value(), rule.heal(), rule.duration())) {
-                added++;
-            }
-        }
-        return added;
-    }
-
-    /**
-     * Tuff has no metal-style convention tag, so we scan every item for a "tuff" name-token
-     * (token split on '_', so "stuffed_potato" is NOT matched) and skip anything edible - a tuff
-     * food entry would otherwise stop non-golem players from eating it.
-     */
-    private static int feedTuffByScan(Class<?> registry) {
-        Map<Item, Tuple<Float, Integer>> map = mapOf(registry, "TUFF_FOODS");
-        if (map == null) {
-            return 0;
-        }
-        int added = 0;
-        for (Item item : BuiltInRegistries.ITEM) {
-            Identifier id = BuiltInRegistries.ITEM.getKey(item);
-            if (id == null || !hasToken(id.getPath(), "tuff")) {
-                continue;
-            }
-            // tryAdd skips edible items, so the tuff diet never blocks normal eating.
-            float[] v = tuffHeal(id.getPath());
-            if (tryAdd(map, item, v[0], (int) v[1])) {
-                added++;
-            }
-        }
-        return added;
-    }
-
-    private static boolean hasToken(String path, String token) {
-        for (String part : path.split("_")) {
-            if (part.equals(token)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Heal value by block form, mirroring Ancestral Archetypes' vanilla-tuff numbers. */
-    private static float[] tuffHeal(String path) {
-        if (path.endsWith("slab")) {
-            return new float[]{2.0f, 16};
-        }
-        if (path.endsWith("stairs") || path.endsWith("wall")) {
-            return new float[]{4.0f, 24};
-        }
-        if (path.endsWith("button")) {
-            return new float[]{0.5f, 4};
-        }
-        if (path.endsWith("pressure_plate")) {
-            return new float[]{1.0f, 10};
-        }
-        if (path.contains("brick")) {
-            return new float[]{4.0f, 24};
-        }
-        if (path.contains("polished")) {
-            return new float[]{3.0f, 22};
-        }
-        return new float[]{2.5f, 20}; // full tuff block: tiles, pillar, paving, carved, statue, plain
     }
 }
