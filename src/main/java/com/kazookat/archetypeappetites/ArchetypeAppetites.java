@@ -4,6 +4,7 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
@@ -103,7 +104,10 @@ public class ArchetypeAppetites implements ModInitializer {
             added += feedByTag(registry, items, rule);
         }
 
-        LOG.info("Registered {} modded metal item(s) for copper/iron/tuff golem archetypes.", added);
+        // Tuff has no metal-style convention tag, so scan for "tuff"-named blocks instead.
+        added += feedTuffByScan(registry);
+
+        LOG.info("Registered {} modded item(s) for copper/iron/tuff golem archetypes.", added);
     }
 
     @SuppressWarnings("unchecked")
@@ -159,5 +163,64 @@ public class ArchetypeAppetites implements ModInitializer {
             }
         }
         return added;
+    }
+
+    /**
+     * Tuff has no metal-style convention tag, so we scan every item for a "tuff" name-token
+     * (token split on '_', so "stuffed_potato" is NOT matched) and skip anything edible - a tuff
+     * food entry would otherwise stop non-golem players from eating it.
+     */
+    private static int feedTuffByScan(Class<?> registry) {
+        Map<Item, Tuple<Float, Integer>> map = mapOf(registry, "TUFF_FOODS");
+        if (map == null) {
+            return 0;
+        }
+        int added = 0;
+        for (Item item : BuiltInRegistries.ITEM) {
+            Identifier id = BuiltInRegistries.ITEM.getKey(item);
+            if (id == null || !hasToken(id.getPath(), "tuff")) {
+                continue;
+            }
+            if (item.getDefaultInstance().has(DataComponents.FOOD)) {
+                continue; // never gate an actual food item behind the tuff diet
+            }
+            float[] v = tuffHeal(id.getPath());
+            if (map.putIfAbsent(item, new Tuple<>(v[0], (int) v[1])) == null) {
+                added++;
+            }
+        }
+        return added;
+    }
+
+    private static boolean hasToken(String path, String token) {
+        for (String part : path.split("_")) {
+            if (part.equals(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Heal value by block form, mirroring Ancestral Archetypes' vanilla-tuff numbers. */
+    private static float[] tuffHeal(String path) {
+        if (path.endsWith("slab")) {
+            return new float[]{2.0f, 16};
+        }
+        if (path.endsWith("stairs") || path.endsWith("wall")) {
+            return new float[]{4.0f, 24};
+        }
+        if (path.endsWith("button")) {
+            return new float[]{0.5f, 4};
+        }
+        if (path.endsWith("pressure_plate")) {
+            return new float[]{1.0f, 10};
+        }
+        if (path.contains("brick")) {
+            return new float[]{4.0f, 24};
+        }
+        if (path.contains("polished")) {
+            return new float[]{3.0f, 22};
+        }
+        return new float[]{2.5f, 20}; // full tuff block: tiles, pillar, paving, carved, statue, plain
     }
 }
